@@ -1,0 +1,180 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sistema Solare Interattivo</title>
+    <style>
+        body { margin: 0; overflow: hidden; }
+        canvas { display: block; }
+        #controls {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            background: rgba(255, 255, 255, 0.8);
+            padding: 10px;
+            border-radius: 5px;
+            z-index: 1000;
+        }
+    </style>
+</head>
+<body>
+    <div id="controls">
+        <label for="speed">Velocità dei Pianeti:</label>
+        <input type="range" id="speed" name="speed" min="1" max="100" value="10">
+        <br>
+        <label for="lightIntensity">Intensità delle Luci:</label>
+        <input type="range" id="lightIntensity" name="lightIntensity" min="0" max="5" value="2" step="0.1">
+        <br>
+        <label for="shadows">Abilita Ombre:</label>
+        <input type="checkbox" id="shadows" name="shadows" checked>
+    </div>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.125.2/build/three.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.125.2/examples/js/controls/OrbitControls.js"></script>
+    <script>
+        // Inizializzazione scena, camera, renderer
+        const scene = new THREE.Scene();
+        const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+        const renderer = new THREE.WebGLRenderer();
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        renderer.shadowMap.enabled = true;
+        document.body.appendChild(renderer.domElement);
+
+        // Controlli di orbita con abilità di pan
+        const controls = new THREE.OrbitControls(camera, renderer.domElement);
+        controls.enablePan = true; // Abilita il pan
+        controls.enableZoom = true; // Abilita lo zoom
+        controls.zoomSpeed = 1.2; // Velocità dello zoom
+
+        // Creare una luce solare
+        const sunLight = new THREE.PointLight(0xffffff, 2, 100);
+        sunLight.position.set(0, 0, 0);
+        sunLight.castShadow = true;
+        scene.add(sunLight);
+
+        // Aggiungere una AmbientLight per illuminare leggermente tutta la scena
+        const ambientLight = new THREE.AmbientLight(0x404040, 1.5); // light intensity increased
+        scene.add(ambientLight);
+
+        // Caricare le texture
+        const textureLoader = new THREE.TextureLoader();
+
+        // Creare una sfera per il sole
+        const sunGeometry = new THREE.SphereGeometry(1.5, 32, 32);
+        const sunMaterial = new THREE.MeshStandardMaterial({
+            map: textureLoader.load('textures/sun.jpg'), // Aggiungi la texture del sole
+        });
+        const sun = new THREE.Mesh(sunGeometry, sunMaterial);
+        scene.add(sun);
+
+        // Dati dei pianeti (nome, raggio, distanza dal sole, periodo orbitale, periodo di rotazione, texture, normalMap, bumpMap)
+        const planetsData = [
+            { name: 'Mercury', radius: 0.055, distance: 2, period: 88, rotation: 58.6, texture: 'textures/mercury.jpg' },
+            { name: 'Venus', radius: 0.085, distance: 3, period: 225, rotation: -243, texture: 'textures/venus.jpg' },
+            { name: 'Earth', radius: 0.09, distance: 4, period: 365, rotation: 1, texture: 'textures/earth.jpg' },
+            { name: 'Mars', radius: 0.048, distance: 5, period: 687, rotation: 1.03, texture: 'textures/mars.jpg' },
+            { name: 'Jupiter', radius: 1, distance: 6, period: 4333, rotation: 0.41, texture: 'textures/jupiter.jpg' },
+            { name: 'Saturn', radius: 0.9, distance: 7, period: 10759, rotation: 0.45, texture: 'textures/saturn.jpg', ringTexture: 'textures/saturn_ring.png' },
+            { name: 'Uranus', radius: 0.4, distance: 8, period: 30687, rotation: -0.72, texture: 'textures/uranus.jpg' },
+            { name: 'Neptune', radius: 0.39, distance: 9, period: 60190, rotation: 0.67, texture: 'textures/neptune.jpg' },
+        ];
+
+        // Caricare le texture e creare i pianeti
+        const planets = [];
+        const planetGroups = [];
+        planetsData.forEach(data => {
+            const planetGeometry = new THREE.SphereGeometry(data.radius, 32, 32);
+            const planetMaterial = new THREE.MeshStandardMaterial({
+                map: textureLoader.load(data.texture),
+            });
+            if (data.normalMap) {
+                planetMaterial.normalMap = textureLoader.load(data.normalMap);
+                planetMaterial.normalScale = new THREE.Vector2(1, 1); // Modifica intensità delle normali
+            }
+            if (data.specularMap) {
+                planetMaterial.specularMap = textureLoader.load(data.specularMap);
+                planetMaterial.shininess = 50; // Modifica l'intensità della specularità
+            }
+            const planet = new THREE.Mesh(planetGeometry, planetMaterial);
+            planet.castShadow = true;
+            planet.receiveShadow = true;
+
+            // Creare un gruppo per il pianeta e aggiungere il pianeta al gruppo
+            const planetGroup = new THREE.Group();
+            planetGroup.position.set(data.distance, 0, 0);
+            planetGroup.add(planet);
+            planet.userData = { distance: data.distance, period: data.period, rotation: data.rotation };
+            scene.add(planetGroup);
+            planets.push(planet);
+            planetGroups.push(planetGroup);
+
+            // Aggiungere anelli per Saturno
+            if (data.name === 'Saturn') {
+                const ringGeometry = new THREE.RingGeometry(data.radius + 0.1, data.radius + 0.4, 32);
+                const ringMaterial = new THREE.MeshStandardMaterial({
+                    map: textureLoader.load(data.ringTexture),
+                    side: THREE.DoubleSide,
+                    transparent: true,
+                });
+                const ring = new THREE.Mesh(ringGeometry, ringMaterial);
+                ring.rotation.x = Math.PI / 2;
+                planetGroup.add(ring);
+            }
+        });
+
+        // Aggiungere uno sfondo stellato
+        const starTexture = textureLoader.load('textures/stars.jpg');
+        scene.background = starTexture;
+
+        // Posizionare la camera
+        camera.position.z = 20;
+
+        // Variabili di controllo
+        let speedFactor = 10;
+        const speedInput = document.getElementById('speed');
+        speedInput.addEventListener('input', (event) => {
+            speedFactor = event.target.value;
+        });
+
+        let lightIntensity = 2;
+        const lightIntensityInput = document.getElementById('lightIntensity');
+        lightIntensityInput.addEventListener('input', (event) => {
+            lightIntensity = event.target.value;
+            sunLight.intensity = lightIntensity;
+            ambientLight.intensity = lightIntensity * 0.75;
+        });
+
+        const shadowInput = document.getElementById('shadows');
+        shadowInput.addEventListener('change', (event) => {
+            const enableShadows = event.target.checked;
+            planets.forEach(planet => {
+                planet.castShadow = enableShadows;
+                planet.receiveShadow = enableShadows;
+            });
+        });
+
+        // Funzione di animazione
+        function animate() {
+            requestAnimationFrame(animate);
+
+            // Rotazione e orbita dei pianeti
+            const time = Date.now() * 0.001 * speedFactor;
+            planetGroups.forEach(group => {
+                const planet = group.children[0];
+                const { distance, period, rotation } = planet.userData;
+                const angle = time * 2 * Math.PI / period;
+                group.position.x = distance * Math.cos(angle);
+                group.position.z = distance * Math.sin(angle);
+
+                // Rotazione del pianeta su se stesso
+                planet.rotation.y += 0.01 * rotation; // velocità di rotazione su se stesso
+            });
+
+            controls.update();
+            renderer.render(scene, camera);
+        }
+
+        animate();
+    </script>
+</body>
+</html>
